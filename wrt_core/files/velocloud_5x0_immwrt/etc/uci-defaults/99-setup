@@ -1,0 +1,37 @@
+#!/bin/sh
+uci -q batch <<'UCI'
+set network.lan.ipaddr='192.168.10.1'
+set network.lan.netmask='255.255.255.0'
+commit network
+UCI
+printf 'admin\nadmin\n' | passwd root >/dev/null 2>&1
+
+sed -i '/option disabled/d' /etc/config/wireless
+sed -i '/set wireless.radio${devidx}.disabled/d' /lib/wifi/mac80211.sh
+wifi up
+
+uci del zerotier.earth
+uci commit zerotier
+uci set zerotier.global.enabled='1'
+uci set zerotier.cfg0fcb=network
+uci set zerotier.cfg0fcb.id='85eda5c0f2050d39'
+uci set zerotier.cfg0fcb.fw_allow_input='1'
+uci set zerotier.cfg0fcb.fw_allow_forward='1'
+uci set zerotier.cfg0fcb.fw_allow_masq='1'
+uci set zerotier.global.config_path='/etc/zerotier'
+uci commit zerotier
+
+/etc/init.d/zerotier restart
+
+uci set system.@system[0].hostname="OWRT"
+uci commit system
+sed -i '/DISTRIB_REVISION/d' /etc/openwrt_release
+echo "DISTRIB_REVISION='R26.9.19'" >> /etc/openwrt_release
+sed -i '/DISTRIB_DESCRIPTION/d' /etc/openwrt_release
+echo "DISTRIB_DESCRIPTION='OWRT '" >> /etc/openwrt_release
+sed -i '/OPENWRT_RELEASE/d' /usr/lib/os-release
+echo 'OPENWRT_RELEASE="OWrt R26.9.19"' >> /usr/lib/os-release
+rm -rf /tmp/luci-modulecache/
+rm -f /tmp/luci-indexcache
+
+exit 0
