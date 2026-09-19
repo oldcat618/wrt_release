@@ -10,11 +10,11 @@ config memmap
 #  - 2-wire: open-loop duty curve min_duty..255 over t_min..t_max
 # Curve: <=42°C stop, 45°C start spinning, 45→60°C ramp, >=60°C full speed.
 config fan
-	option min_rpm '1200'
-	option max_rpm '6000'
+	option min_rpm '1000'
+	option max_rpm '3000'
 	option t_min '45'
 	option t_max '60'
-	option off_below '42'
+	option off_below '40'
 	option on_above '45'
 	option tach 'auto'
 	option min_duty '45'
