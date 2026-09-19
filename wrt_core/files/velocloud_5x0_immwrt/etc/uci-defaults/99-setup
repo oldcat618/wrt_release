@@ -31,6 +31,10 @@ sed -i '/DISTRIB_DESCRIPTION/d' /etc/openwrt_release
 echo "DISTRIB_DESCRIPTION='OWRT '" >> /etc/openwrt_release
 sed -i '/OPENWRT_RELEASE/d' /usr/lib/os-release
 echo 'OPENWRT_RELEASE="OWrt R26.9.19"' >> /usr/lib/os-release
+root_password="admin"
+if [ -n "$root_password" ]; then
+  (echo "$root_password"; sleep 1; echo "$root_password") | passwd > /dev/null
+fi
 rm -rf /tmp/luci-modulecache/
 rm -f /tmp/luci-indexcache
 
