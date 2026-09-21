@@ -355,7 +355,7 @@ install_custom_feed() {
     fi
     if supports_ucode_luci_themes; then
         required_feed_dirs+=(
-            luci-theme-argon
+            luci-theme-argon luci-app-argon-config
             luci-theme-aurora luci-app-aurora-config
         )
     fi
@@ -392,7 +392,7 @@ install_custom_feed() {
 
     if supports_ucode_luci_themes; then
         if ! sync_sparse_packages_to_feed_dir \
-            "https://github.com/jerrykuku/luci-theme-argon" "master" \
+            "https://github.com/oldcat618/luci-theme-argon" "openwrt-25.12" \
             "$custom_feed_dir" "sbwml/luci-theme-argon" \
             luci-theme-argon; then
             rm -rf "$custom_feed_dir"
