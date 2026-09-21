@@ -312,6 +312,7 @@ install_custom_feed() {
     local feeds_path
     local fullconenat_nft_dir="$BUILD_DIR/package/network/utils/fullconenat-nft"
     local fullconenat_dir="$BUILD_DIR/package/network/utils/fullconenat"
+    local fullconenat_sonic_dir="$BUILD_DIR/package/network/utils/fullconenat-sonic"
     local custom_feed_dir
     local custom_feed_worktree_dir
     local custom_feed_name
@@ -336,7 +337,7 @@ install_custom_feed() {
         open-app-filter luci-app-oaf lucky luci-app-lucky luci-app-easytier
         luci-app-emmc-health luci-app-wolultra luci-app-mini-diskmanager
         axonhub luci-app-axonhub gecoosac luci-app-gecoosac sing-box
-        tingreader luci-app-tingreader
+        tingreader luci-app-tingreader luci-app-velo5x0-fan
     )
     local custom_feed_sources=()
     local missing_feed_dirs=()
@@ -347,10 +348,13 @@ install_custom_feed() {
     local repo_packages
     local repo_package_array=()
 
-    if [ ! -d "$fullconenat_nft_dir" ]; then
+    # Trees with fullconenat-sonic (owrt >= 6af6d3945c) embed fullcone into
+    # nf_nat/xt_MASQUERADE and ship no standalone fullconenat packages;
+    # never fall back to the legacy custom_feed builds there.
+    if [ ! -d "$fullconenat_nft_dir" ] && [ ! -d "$fullconenat_sonic_dir" ]; then
         base_custom_feed_packages+=(fullconenat-nft)
     fi
-    if [ ! -d "$fullconenat_dir" ]; then
+    if [ ! -d "$fullconenat_dir" ] && [ ! -d "$fullconenat_sonic_dir" ]; then
         base_custom_feed_packages+=(fullconenat)
     fi
     if supports_ucode_luci_themes; then
@@ -368,7 +372,6 @@ install_custom_feed() {
         "sbwml/luci-app-mosdns|https://github.com/sbwml/luci-app-mosdns.git|v5|mosdns luci-app-mosdns"
         "Openwrt-Passwall/openwrt-passwall|https://github.com/Openwrt-Passwall/openwrt-passwall.git|main|luci-app-passwall"
         "nikkinikki-org/OpenWrt-nikki|https://github.com/nikkinikki-org/OpenWrt-nikki.git|main|nikki luci-app-nikki mihomo-meta"
-        "Openwrt-Fancontrol/openwrt-fancontrol|https://github.com/JiaY-shi/fancontrol.git|main|luci-app-fancontrol"
     )
 
     feeds_path=$(get_feeds_path)
@@ -392,9 +395,9 @@ install_custom_feed() {
 
     if supports_ucode_luci_themes; then
         if ! sync_sparse_packages_to_feed_dir \
-            "https://github.com/oldcat618/luci-theme-argon" "openwrt-25.12" \
+            "https://github.com/oldcat618/luci-theme-argon.git" "openwrt-25.12" \
             "$custom_feed_dir" "sbwml/luci-theme-argon" \
-            luci-theme-argon; then
+            luci-theme-argon luci-app-argon-config; then
             rm -rf "$custom_feed_dir"
             return 1
         fi
@@ -464,6 +467,13 @@ install_custom_feed() {
     if ! sync_tingreader_packages_to_feed_dir \
         "https://github.com/dqsq2e2/luci-app-tingreader.git" "main" \
         "$custom_feed_dir" "dqsq2e2/luci-app-tingreader"; then
+        rm -rf "$custom_feed_dir"
+        return 1
+    fi
+
+    if ! sync_repo_root_package_to_feed_dir \
+        "https://github.com/dqsq2e2/luci-app-velo5x0-fan.git" "main" \
+        "$custom_feed_dir" "dqsq2e2/luci-app-velo5x0-fan" "luci-app-velo5x0-fan"; then
         rm -rf "$custom_feed_dir"
         return 1
     fi
