@@ -184,37 +184,136 @@ jobs:
           du -sh ./firmware 2>/dev/null || true
           echo "=================================================="
 
+      - name: Verify Build Source and Kernel Config
+        run: |
+          set -e
+
+          echo "=============== Build Source ==============="
+          echo "BUILD_SRC=${BUILD_SRC:-unknown}"
+          echo "============================================="
+
+          echo "=============== x86 Kernel Config ==========="
+          find . -path '*/target/linux/x86/config-*' -type f -print 2>/dev/null || true
+
+          echo "=============== Linux Version Hints ========="
+          grep -R "LINUX_VERSION" ./action_build/target/linux/x86 ./action_build/include 2>/dev/null | head -30 || true
+
+          echo "============================================="
+
       - name: Build Firmware
         env:
           ADD_CONFIG_FRAGMENTS: ${{ inputs.add_fragments }}
           REMOVE_CONFIG_FRAGMENTS: ${{ inputs.remove_fragments }}
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          # 为 x86 内核启用 VMSCAPE 缓解，避免 syncconfig 交互报错
-          found=0
-          while IFS= read -r cfg; do
-            found=1
-            echo "Patching $cfg"
-            grep -q '^CONFIG_MITIGATION_VMSCAPE=' "$cfg" || echo 'CONFIG_MITIGATION_VMSCAPE=y' >> "$cfg"
-            grep 'CONFIG_MITIGATION_VMSCAPE' "$cfg" || echo "WARN: append failed for $cfg"
-          done < <(find . -path '*/target/linux/x86/config-6.18' -type f 2>/dev/null)
+          set -e
 
-          if [ "$found" -eq 0 ]; then
+          echo "=================================================="
+          echo "Preparing Linux 6.18 kernel configuration"
+          echo "=================================================="
+
+          # ------------------------------------------------------------
+          # 1. 检查 x86 Linux 6.18 配置文件
+          # ------------------------------------------------------------
+          CONFIG_FILES="$(find . -path '*/target/linux/x86/config-6.18' -type f 2>/dev/null || true)"
+
+          if [ -z "$CONFIG_FILES" ]; then
             echo "ERROR: no target/linux/x86/config-6.18 found under $(pwd)" >&2
-            find . -name 'config-6.18' -path '*target/linux*' 2>/dev/null || true
+            echo "Available x86 kernel config files:"
+            find . -path '*/target/linux/x86/config-*' -type f -print 2>/dev/null || true
             exit 1
           fi
 
+          for cfg in $CONFIG_FILES; do
+            echo "Checking $cfg"
+
+            # Linux 6.18 新增的 VMSCAPE mitigation。
+            if ! grep -q '^CONFIG_MITIGATION_VMSCAPE=' "$cfg"; then
+              echo 'CONFIG_MITIGATION_VMSCAPE=y' >> "$cfg"
+            fi
+
+            # CPU mitigation 总开关。
+            if ! grep -q '^CONFIG_CPU_MITIGATIONS=' "$cfg"; then
+              echo 'CONFIG_CPU_MITIGATIONS=y' >> "$cfg"
+            fi
+
+            echo "Relevant kernel mitigation settings:"
+            grep -E '^CONFIG_(CPU_MITIGATIONS|MITIGATION_)' "$cfg" || true
+          done
+
+          # ------------------------------------------------------------
+          # 2. 清理 target kernel 的旧 .config。
+          # 防止 kernel 版本变化后使用旧 .config 触发 syncconfig。
+          # ------------------------------------------------------------
+          if [ -d "./action_build/build_dir" ]; then
+            echo "Cleaning stale Linux target configuration..."
+
+            find ./action_build/build_dir/target-* -maxdepth 7               -type f \( -name ".config" -o -name "auto.conf" -o -name "auto.conf.cmd" \)               -path "*/linux-*" -print -delete 2>/dev/null || true
+          fi
+
+          # ------------------------------------------------------------
+          # 3. 磁盘空间检查
+          # ------------------------------------------------------------
           available_gb=$(df --output=avail -BG . | tail -n 1 | tr -dc '0-9')
           required_gb=20
+
           if [[ "${{ inputs.model }}" == "MEDIATEK-WIFI-YES" ]]; then
             required_gb=35
           fi
+
           if (( available_gb < required_gb )); then
             echo "Insufficient disk space: ${available_gb}G available, ${required_gb}G required" >&2
             exit 1
           fi
-          ./build.sh ${{ inputs.model }}
 
+          echo "Disk space OK: ${available_gb}G available"
+
+          # ------------------------------------------------------------
+          # 4. 非交互执行 OpenWrt 构建
+          #
+          # Linux 6.18 新增 Kconfig 项可能出现：
+          #
+          #   Restart config...
+          #   MITIGATION_xxx [Y/n/?] (NEW)
+          #
+          # GitHub Actions 没有人可以回答这些问题。
+          # 给 stdin 持续提供空行，相当于接受 Kconfig 默认值，
+          # 防止 syncconfig 因交互式输入失败。
+          # ------------------------------------------------------------
+          echo "Starting non-interactive OpenWrt build..."
+
+          set +e
+          yes "" | ./build.sh "${{ inputs.model }}"
+          build_rc=${PIPESTATUS[1]}
+          set -e
+
+          if [ "$build_rc" -ne 0 ]; then
+            echo ""
+            echo "=================================================="
+            echo "BUILD FAILED"
+            echo "=================================================="
+
+            echo "Kernel directories:"
+            find ./action_build/build_dir -maxdepth 6               -type d -name 'linux-*' -print 2>/dev/null || true
+
+            echo ""
+            echo "Kernel config files:"
+            find ./action_build/build_dir -maxdepth 8               -type f \( -name ".config" -o -name "auto.conf" -o -name "auto.conf.cmd" \)               -print 2>/dev/null || true
+
+            echo ""
+            echo "VMSCAPE configuration:"
+            grep -R "CONFIG_MITIGATION_VMSCAPE"               ./action_build/build_dir               ./action_build/target/linux/x86               2>/dev/null || true
+
+            echo ""
+            echo "Recent kernel build log candidates:"
+            find ./action_build/build_dir -type f \( -name "*.log" -o -name "config.log" \)               -print 2>/dev/null | head -50 || true
+
+            exit "$build_rc"
+          fi
+
+          echo "=================================================="
+          echo "Build completed successfully"
+          echo "=================================================="
       - name: Get Kernel Verion
         run: |
           # 获取内核版本
