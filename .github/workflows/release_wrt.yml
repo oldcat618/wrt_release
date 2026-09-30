@@ -184,7 +184,7 @@ jobs:
           du -sh ./firmware 2>/dev/null || true
           echo "=================================================="
 
-    - name: Build Firmware
+      - name: Build Firmware
         env:
           ADD_CONFIG_FRAGMENTS: ${{ inputs.add_fragments }}
           REMOVE_CONFIG_FRAGMENTS: ${{ inputs.remove_fragments }}
