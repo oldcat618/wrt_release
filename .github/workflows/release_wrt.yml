@@ -189,6 +189,10 @@ jobs:
           ADD_CONFIG_FRAGMENTS: ${{ inputs.add_fragments }}
           REMOVE_CONFIG_FRAGMENTS: ${{ inputs.remove_fragments }}
         run: |
+          if [ -f ./action_build/target/linux/x86/config-6.18 ]; then
+            echo 'CONFIG_MITIGATION_VMSCAPE=y' >> ./action_build/target/linux/x86/config-6.18
+          fi
+          
           available_gb=$(df --output=avail -BG . | tail -n 1 | tr -dc '0-9')
           required_gb=20
           if [[ "${{ inputs.model }}" == "MEDIATEK-WIFI-YES" ]]; then
