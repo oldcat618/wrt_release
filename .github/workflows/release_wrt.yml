@@ -184,15 +184,26 @@ jobs:
           du -sh ./firmware 2>/dev/null || true
           echo "=================================================="
 
-      - name: Build Firmware
+    - name: Build Firmware
         env:
           ADD_CONFIG_FRAGMENTS: ${{ inputs.add_fragments }}
           REMOVE_CONFIG_FRAGMENTS: ${{ inputs.remove_fragments }}
         run: |
-          if [ -f ./action_build/target/linux/x86/config-6.18 ]; then
-            echo 'CONFIG_MITIGATION_VMSCAPE=y' >> ./action_build/target/linux/x86/config-6.18
+          # 为 x86 内核启用 VMSCAPE 缓解，避免 syncconfig 交互报错
+          found=0
+          while IFS= read -r cfg; do
+            found=1
+            echo "Patching $cfg"
+            grep -q '^CONFIG_MITIGATION_VMSCAPE=' "$cfg" || echo 'CONFIG_MITIGATION_VMSCAPE=y' >> "$cfg"
+            grep 'CONFIG_MITIGATION_VMSCAPE' "$cfg" || echo "WARN: append failed for $cfg"
+          done < <(find . -path '*/target/linux/x86/config-6.18' -type f 2>/dev/null)
+
+          if [ "$found" -eq 0 ]; then
+            echo "ERROR: no target/linux/x86/config-6.18 found under $(pwd)" >&2
+            find . -name 'config-6.18' -path '*target/linux*' 2>/dev/null || true
+            exit 1
           fi
-          
+
           available_gb=$(df --output=avail -BG . | tail -n 1 | tr -dc '0-9')
           required_gb=20
           if [[ "${{ inputs.model }}" == "MEDIATEK-WIFI-YES" ]]; then
